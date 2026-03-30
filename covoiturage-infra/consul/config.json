@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "frontend",
+      "port": 8000,
+      "checks": [
+        {
+          "http": "http://frontend:8000/",
+          "interval": "10s"
+        }
+      ]
+    }
+  ]
+}

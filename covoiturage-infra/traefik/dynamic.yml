@@ -1,0 +1,13 @@
+http:
+  routers:
+    frontend:
+      rule: "Host(`localhost`)"
+      service: frontend
+      entryPoints:
+        - web
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:8000"

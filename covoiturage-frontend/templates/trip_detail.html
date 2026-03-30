@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Trip Details{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header"><h3>Trip Details</h3></div>
+                <div class="card-body">
+                    <h4>{{ trip.departure }} → {{ trip.destination }}</h4>
+                    <p><strong>Date:</strong> {{ trip.departure_date }} at {{ trip.departure_time }}</p>
+                    <p><strong>Available Seats:</strong> {{ trip.available_seats }}</p>
+                    <p><strong>Price:</strong> {{ trip.price_per_seat }} DA</p>
+                    <p><strong>Description:</strong> {{ trip.description }}</p>
+                    
+                    {% if request.session.access_token %}
+                        <form method="post" action="{% url 'confirm_booking' trip.id %}">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label class="form-label">Number of seats</label>
+                                <input type="number" name="seats" class="form-control" min="1" max="{{ trip.available_seats }}" required>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100">Book Now</button>
+                        </form>
+                    {% else %}
+                        <p class="text-center"><a href="{% url 'login' %}">Login to book</a></p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
