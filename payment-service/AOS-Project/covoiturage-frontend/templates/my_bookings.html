@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}My Bookings{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header"><h3>My Bookings</h3></div>
+                <div class="card-body">
+                    {% if bookings %}
+                        {% for booking in bookings %}
+                            <div class="card mt-2">
+                                <div class="card-body">
+                                    <h5>{{ booking.trip.departure }} → {{ booking.trip.destination }}</h5>
+                                    <p>Date: {{ booking.trip.departure_date }}</p>
+                                    <p>Seats: {{ booking.seats_booked }} | Total: {{ booking.total_price }} DA</p>
+                                    <p>Status: <span class="badge bg-success">{{ booking.status }}</span></p>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-center">No bookings yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

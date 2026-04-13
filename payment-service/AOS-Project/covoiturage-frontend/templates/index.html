@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2 text-center">
+            <h1 class="display-4">Welcome to Covoiturage</h1>
+            <p class="lead">Share your trips and save money while reducing your carbon footprint!</p>
+            {% if not request.session.access_token %}
+                <div class="mt-4">
+                    <a href="{% url 'register' %}" class="btn btn-primary btn-lg">Get Started</a>
+                    <a href="{% url 'login' %}" class="btn btn-outline-secondary btn-lg">Login</a>
+                </div>
+            {% else %}
+                <div class="mt-4">
+                    <a href="{% url 'search_trips' %}" class="btn btn-primary btn-lg">Find a Trip</a>
+                    <a href="{% url 'publish_trip' %}" class="btn btn-success btn-lg">Publish a Trip</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="row mt-5">
+        <div class="col-md-4 text-center">
+            <div class="card"><div class="card-body"><h3>💰 Save Money</h3><p>Share travel costs</p></div></div>
+        </div>
+        <div class="col-md-4 text-center">
+            <div class="card"><div class="card-body"><h3>🌍 Eco-Friendly</h3><p>Reduce CO2 emissions</p></div></div>
+        </div>
+        <div class="col-md-4 text-center">
+            <div class="card"><div class="card-body"><h3>🤝 Meet People</h3><p>Connect with travelers</p></div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
