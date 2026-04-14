@@ -27,7 +27,7 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "5672:5672"
+      - "8085:5672"
       - "15672:15672"
     networks:
       - covoiturage-net
@@ -50,6 +50,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Service 1: Frontend (Django)
+  frontend:
+    build: ../covoiturage-frontend
+    container_name: covoiturage-frontend
+    ports:
+      - "8005:8000"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      AUTH_SERVICE_URL: http://auth-service:8001
+      TRIP_SERVICE_URL: http://trip-service:8002
+      BOOKING_SERVICE_URL: http://booking-service:8003
+    depends_on:
+      - rabbitmq
+      - postgres
+      - consul
+    networks:
+      - covoiturage-net
+    command: python manage.py runserver 0.0.0.0:8000
+
+  # Service 2: Consumer (RabbitMQ)
+  consumer:
+    build: ../covoiturage-frontend
+    container_name: covoiturage-consumer
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      - rabbitmq
+    networks:
+      - covoiturage-net
+    command: python manage.py consume_rabbitmq
 
 volumes:
   postgres_data:
