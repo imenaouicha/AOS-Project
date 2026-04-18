@@ -14,4 +14,7 @@ urlpatterns = [
     path('wallet/add-balance/', views.add_balance, name='add_balance'),
     path('webhook/', views.webhook_callback, name='webhook'),
     path('', views.home_page, name='home'),
+    path('refund/cancel/', views.process_cancellation_refund, name='refund_cancel'),
+    path('refund/status/<uuid:booking_id>/', views.get_refund_status, name='refund_status'),
+    path('refund/rules/', views.get_refund_rules, name='refund_rules'),
 ]

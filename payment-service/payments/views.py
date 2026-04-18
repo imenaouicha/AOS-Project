@@ -10,7 +10,9 @@ from django.shortcuts import get_object_or_404
 from django.http import FileResponse
 from django.conf import settings
 from decimal import Decimal
-
+from .models import Transaction, Wallet, PaymentStatus, PaymentMethod, Refund, CancellationType
+from .consumers import RabbitMQClient
+from django.utils import timezone
 from .models import Transaction, Wallet, PaymentStatus, PaymentMethod
 from .serializers import (
     TransactionSerializer, 
@@ -381,3 +383,191 @@ def webhook_callback(request):
 @permission_classes([AllowAny])
 def home_page(request):
     return render(request, 'payments/home.html')
+
+# ============================================================
+# REMBOURSEMENT ENDPOINTS
+# ============================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def process_cancellation_refund(request):
+    """
+    Traite un remboursement suite à une annulation
+    
+    Body:
+    {
+        "booking_id": "uuid",
+        "transaction_id": "uuid",
+        "cancellation_type": "passenger|driver|refusal",
+        "reason": "Raison de l'annulation",
+        "departure_time": "2024-04-20T14:00:00Z"
+    }
+    """
+    from datetime import datetime
+    from decimal import Decimal
+    
+    booking_id = request.data.get('booking_id')
+    transaction_id = request.data.get('transaction_id')
+    cancellation_type = request.data.get('cancellation_type')
+    reason = request.data.get('reason', 'Annulation')
+    departure_time_str = request.data.get('departure_time')
+    
+    if not all([booking_id, transaction_id, cancellation_type, departure_time_str]):
+        return Response({
+            'error': 'booking_id, transaction_id, cancellation_type et departure_time sont requis'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Convertir la chaîne en datetime
+        departure_time = datetime.fromisoformat(departure_time_str.replace('Z', '+00:00'))
+        cancelled_at = timezone.now()
+        
+        # Récupérer la transaction
+        transaction = Transaction.objects.get(id=transaction_id)
+        
+        # Vérifier que le paiement est complété
+        if transaction.status != PaymentStatus.COMPLETED:
+            return Response({
+                'error': f'Le paiement n\'est pas complété (statut: {transaction.status})'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Calculer les heures avant départ
+        time_diff = departure_time - cancelled_at
+        hours_before = time_diff.total_seconds() / 3600
+        
+        # Définir les montants (en Decimal)
+        total_amount = transaction.amount
+        driver_amount = transaction.driver_amount
+        commission = transaction.commission
+        zero = Decimal('0')
+        hundred_percent = Decimal('100')
+        fifty_percent = Decimal('50')
+        
+        # Calculer le remboursement selon le type et le délai
+        if cancellation_type in ['driver', 'refusal']:
+            # Conducteur annule ou refuse → remboursement total
+            refund_amount = total_amount
+            percentage = hundred_percent
+            driver_compensation = zero
+            platform_fee_returned = commission
+        else:
+            # Passager annule → selon délai
+            if hours_before >= 48:
+                refund_amount = total_amount
+                percentage = hundred_percent
+                driver_compensation = zero
+                platform_fee_returned = commission
+            elif hours_before >= 24:
+                refund_amount = total_amount / Decimal('2')
+                percentage = fifty_percent
+                driver_compensation = driver_amount / Decimal('2')
+                platform_fee_returned = commission / Decimal('2')
+            else:
+                refund_amount = zero
+                percentage = zero
+                driver_compensation = driver_amount
+                platform_fee_returned = zero
+        
+        # Créer le remboursement
+        refund = Refund.objects.create(
+            transaction=transaction,
+            booking_id=booking_id,
+            amount=refund_amount,
+            percentage=percentage,
+            cancellation_type=cancellation_type,
+            cancellation_reason=reason,
+            hours_before_departure=int(hours_before),
+            driver_compensation=driver_compensation,
+            platform_fee_returned=platform_fee_returned,
+            status='completed',
+            completed_at=timezone.now()
+        )
+        
+        # Créditer le wallet du passager
+        if refund_amount > zero:
+            wallet, _ = Wallet.objects.get_or_create(user_id=transaction.user_id)
+            wallet.add_balance(refund_amount)
+        
+        # Mettre à jour la transaction
+        transaction.status = PaymentStatus.REFUNDED
+        transaction.save()
+        
+        # Publier un message RabbitMQ
+        rabbitmq = RabbitMQClient()
+        message = {
+            'event': 'payment_refunded',
+            'booking_id': booking_id,
+            'transaction_id': str(transaction.id),
+            'refund_id': str(refund.id),
+            'amount': float(refund_amount),
+            'percentage': float(percentage),
+            'cancellation_type': cancellation_type,
+            'timestamp': refund.completed_at.isoformat()
+        }
+        rabbitmq.publish_message('booking_queue', message)
+        
+        return Response({
+            'success': True,
+            'refund_id': str(refund.id),
+            'refund_amount': float(refund_amount),
+            'percentage': float(percentage),
+            'driver_compensation': float(driver_compensation),
+            'hours_before': hours_before,
+            'cancellation_type': cancellation_type
+        }, status=status.HTTP_200_OK)
+        
+    except Transaction.DoesNotExist:
+        return Response({'error': 'Transaction non trouvée'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_refund_status(request, booking_id):
+    """Vérifier le statut d'un remboursement"""
+    refunds = Refund.objects.filter(booking_id=booking_id)
+    data = []
+    for refund in refunds:
+        data.append({
+            'id': str(refund.id),
+            'booking_id': str(refund.booking_id),
+            'transaction_id': str(refund.transaction.id),
+            'amount': float(refund.amount),
+            'percentage': float(refund.percentage),
+            'cancellation_type': refund.cancellation_type,
+            'cancellation_reason': refund.cancellation_reason,
+            'hours_before_departure': refund.hours_before_departure,
+            'status': refund.status,
+            'completed_at': refund.completed_at.isoformat() if refund.completed_at else None
+        })
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_refund_rules(request):
+    """Retourne les règles de remboursement"""
+    return Response({
+        'rules': {
+            'passenger_cancellation': {
+                'more_than_48h': {'refund_percentage': 100, 'description': 'Remboursement total'},
+                'between_24h_and_48h': {'refund_percentage': 50, 'description': 'Remboursement 50%'},
+                'less_than_24h': {'refund_percentage': 0, 'description': 'Pas de remboursement'}
+            },
+            'driver_cancellation': {
+                'refund_percentage': 100,
+                'description': 'Remboursement total + pénalité conducteur'
+            },
+            'driver_refusal': {
+                'refund_percentage': 100,
+                'description': 'Remboursement total + compensation passager'
+            }
+        },
+        'hours_thresholds': {
+            'full_refund': 48,
+            'half_refund': 24
+        }
+    })

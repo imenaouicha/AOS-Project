@@ -1,8 +1,12 @@
 # payments/models.py
 
-from django.db import models
 import uuid
 from decimal import Decimal
+from django.db import models
+
+# ============================================================
+# CHOICES (énumérations)
+# ============================================================
 
 class PaymentStatus(models.TextChoices):
     PENDING = 'pending', 'En attente'
@@ -18,9 +22,26 @@ class PaymentMethod(models.TextChoices):
     CCP = 'ccp', 'CCP'
     WALLET = 'wallet', 'Portefeuille'
 
+class RefundStatus(models.TextChoices):
+    PENDING = 'pending', 'En attente'
+    PROCESSING = 'processing', 'En traitement'
+    COMPLETED = 'completed', 'Terminé'
+    FAILED = 'failed', 'Échoué'
+
+class CancellationType(models.TextChoices):
+    PASSENGER = 'passenger', 'Annulation passager'
+    DRIVER = 'driver', 'Annulation conducteur'
+    REFUSAL = 'refusal', 'Refus conducteur'
+    AUTOMATIC = 'automatic', 'Annulation automatique'
+
+
+# ============================================================
+# MODELS
+# ============================================================
+
 class Transaction(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    booking_id = models.UUIDField(null=True, blank=True, db_index=True)  # ← MODIFIÉ
+    booking_id = models.UUIDField(null=True, blank=True, db_index=True)
     user_id = models.UUIDField(db_index=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     commission = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -52,6 +73,8 @@ class Transaction(models.Model):
         self.commission = (self.amount * Decimal('0.10')).quantize(Decimal('0.01'))
         self.driver_amount = self.amount - self.commission
         return self.commission
+
+
 class Wallet(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField(unique=True, db_index=True)
@@ -73,14 +96,18 @@ class Wallet(models.Model):
             return True
         return False
 
+
 class Refund(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='refunds')
+    booking_id = models.UUIDField(db_index=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    reason = models.CharField(max_length=255)
-    status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=100)  # ✅ DecimalField
+    cancellation_type = models.CharField(max_length=20, choices=CancellationType.choices, default=CancellationType.PASSENGER)
+    cancellation_reason = models.TextField(blank=True, null=True)
+    hours_before_departure = models.IntegerField(null=True, blank=True)
+    driver_compensation = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    platform_fee_returned = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     initiated_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    
-    def __str__(self):
-        return f"Refund {self.id} - {self.amount} DZD"
+    status = models.CharField(max_length=20, choices=RefundStatus.choices, default=RefundStatus.PENDING)

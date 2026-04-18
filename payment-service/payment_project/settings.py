@@ -3,6 +3,10 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement depuis .env
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,34 +64,18 @@ TEMPLATES = [
 WSGI_APPLICATION = 'payment_project.wsgi.application'
 
 # ============================================================
-# DATABASE CONFIGURATION
+# DATABASE CONFIGURATION - POSTGRESQL
 # ============================================================
-DB_ENGINE = os.environ.get('DB_ENGINE', 'django.db.backends.sqlite3')
-DB_NAME = os.environ.get('DB_NAME', BASE_DIR / 'db.sqlite3')
-DB_USER = os.environ.get('DB_USER', '')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
-DB_HOST = os.environ.get('DB_HOST', '')
-DB_PORT = os.environ.get('DB_PORT', '')
-
-# Utiliser PostgreSQL si les variables sont définies, sinon SQLite
-if DB_ENGINE == 'django.db.backends.postgresql' and DB_HOST:
-    DATABASES = {
-        'default': {
-            'ENGINE': DB_ENGINE,
-            'NAME': DB_NAME,
-            'USER': DB_USER,
-            'PASSWORD': DB_PASSWORD,
-            'HOST': DB_HOST,
-            'PORT': DB_PORT,
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME', 'payment_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
 
 # ============================================================
 # REST FRAMEWORK CONFIGURATION
@@ -97,7 +85,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # Pour les tests, à modifier en production
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20
