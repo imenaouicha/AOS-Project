@@ -118,4 +118,8 @@ pending	⏳ En attente de confirmation
 processing	🔄 En cours de traitement
 completed	✅ Paiement confirmé
 failed	❌ Échec du paiement
+<<<<<<< HEAD
 refunded	🔁 Remboursé
+=======
+refunded	🔁 Remboursé
+>>>>>>> 3030d55655e9a34901d70f2392e45ef2a7f3a888
